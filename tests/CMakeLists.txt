@@ -2,8 +2,9 @@ project(SF_ARITHMETIC_TEST LANGUAGES CXX)
 
 include(FetchContent)
 FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/heads/main.zip
+    googletest
+    GIT_REPOSITORY git@github.com:/google/googletest.git
+    GIT_TAG main
 )
 FetchContent_MakeAvailable(googletest)
 
