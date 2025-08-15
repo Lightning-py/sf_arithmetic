@@ -7,6 +7,8 @@
 #include <stdint.h>  // size_t
 #include <string.h>  // memcpy
 
+#include <stdio.h>
+
 // переобозначения типов для структуры
 typedef int SF_ARITHMETIC_STATUS_CODE;  // тип хранения статус кодов
 typedef uint32_t SF_ARITHMETIC_DIGITS_T;
@@ -75,6 +77,7 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_normalise(sfbigint_t* obj);
 SF_ARITHMETIC_STATUS_CODE sfbigint_setzero(sfbigint_t* obj);
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_copy(sfbigint_t* obj, sfbigint_t** copy);
+SF_ARITHMETIC_STATUS_CODE sfbigint_move(sfbigint_t* obj, sfbigint_t** copy);
 SF_ARITHMETIC_STATUS_CODE sfbigint_swap(sfbigint_t* first, sfbigint_t* second);
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_iszero(sfbigint_t* obj);
@@ -99,7 +102,7 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_divmod10(sfbigint_t* obj,
 SF_ARITHMETIC_STATUS_CODE sfbigint_mul10(sfbigint_t* obj);
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_strtosfbigint(sfbigint_t** obj,
-                                                 SF_ARITHMETIC_CHAR_T* str,
+                                                 const SF_ARITHMETIC_CHAR_T* str,
                                                  SF_ARITHMETIC_SIZE_T len);
 SF_ARITHMETIC_STATUS_CODE sfbigint_tostring(sfbigint_t* obj,
                                             SF_ARITHMETIC_CHAR_T** str);
@@ -114,11 +117,31 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_mul(sfbigint_t* first, sfbigint_t* second,
 SF_ARITHMETIC_STATUS_CODE sfbigint_div(sfbigint_t* first, sfbigint_t* second,
                                        sfbigint_t* res);
 
+// функция +=, прибавляет первое число ко второму и записывает результат в первое
+SF_ARITHMETIC_STATUS_CODE sfbigint_addeq(sfbigint_t* first, sfbigint_t* second);
+
+// функция +=, прибавляет первое число ко второму и записывает результат в первое
+SF_ARITHMETIC_STATUS_CODE sfbigint_subeq(sfbigint_t* first, sfbigint_t* second);
+
 //
 SF_ARITHMETIC_STATUS_CODE
 __sfbigint_add__(sfbigint_t* first, sfbigint_t* second, sfbigint_t* res);
 SF_ARITHMETIC_STATUS_CODE __sfbigint_sub__(sfbigint_t* first,
                                            sfbigint_t* second, sfbigint_t* res);
+
+// static SF_ARITHMETIC_STATUS_CODE sfbigint_split(sfbigint_t* num,
+//                                                 SF_ARITHMETIC_SIZE_T m,
+//                                                 sfbigint_t* low,
+//                                                 sfbigint_t* high);
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_mul_naive(sfbigint_t* first,
+    sfbigint_t* second,
+    sfbigint_t** res);
+
+#define SF_ARITHMETIC_KARATSUBA_THRESHOLD 4
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_mul_digits(sfbigint_t* obj, SF_ARITHMETIC_DIGITS_T num);
+
 
 /*
 дефайны для определения способа выделения памяти

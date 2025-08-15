@@ -4,7 +4,7 @@
 #include "sf_arithmetic.h"
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_fine(sfbigint_t* obj) {
-    return (obj && obj->digits && obj->size > 0) ? SF_ARITHMETIC_FINE
+    return (obj && obj->digits && obj->size > 0 && (obj->sign == SF_ARITHMETIC_PLUS || obj->sign == SF_ARITHMETIC_MINUS)) ? SF_ARITHMETIC_FINE
                                                  : SF_ARITHMETIC_MEMORY_ERROR;
 }
 
@@ -77,6 +77,57 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_copy(sfbigint_t* obj, sfbigint_t** copy) {
     memcpy((*copy)->digits, obj->digits,
            SF_ARITHMETIC_DIGITS_T_SIZE * obj->size);
     (*copy)->size = obj->size;
+    (*copy)->sign = obj->sign;
+
+    return SF_ARITHMETIC_FINE;
+}
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_move(sfbigint_t* obj, sfbigint_t** copy) {
+    if (sfbigint_fine(obj) != SF_ARITHMETIC_FINE)
+        return SF_ARITHMETIC_MEMORY_ERROR;
+
+    *copy = (sfbigint_t*) SF_ARITHMETIC_MALLOC(sizeof(sfbigint_t));
+
+    (*copy)->digits = obj->digits;
+
+    (*copy)->size = obj->size;
+    (*copy)->sign = obj->sign;
+
+    SF_ARITHMETIC_FREE(obj);
+
+    return SF_ARITHMETIC_FINE;
+}
+
+
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_copytoexistent(sfbigint_t* obj, sfbigint_t* copy) {
+    if (sfbigint_fine(obj) != SF_ARITHMETIC_FINE || sfbigint_fine(copy) != SF_ARITHMETIC_FINE) return SF_ARITHMETIC_MEMORY_ERROR;
+
+    SF_ARITHMETIC_FREE(copy->digits);
+    
+    SF_ARITHMETIC_DIGITS_T* new_digits = SF_ARITHMETIC_CALLOC(obj->size, SF_ARITHMETIC_DIGITS_T_SIZE);
+    if (!new_digits) return SF_ARITHMETIC_MEMORY_ERROR;
+    
+    memcpy(new_digits, obj->digits, obj->size * SF_ARITHMETIC_DIGITS_T_SIZE);
+
+    copy->digits = new_digits;
+    copy->size = obj->size;
+    copy->sign = obj->sign;
+
+    return SF_ARITHMETIC_FINE;
+}
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_movetoexistent(sfbigint_t* obj, sfbigint_t* copy) {
+    if (sfbigint_fine(obj) != SF_ARITHMETIC_FINE || sfbigint_fine(copy) != SF_ARITHMETIC_FINE) return SF_ARITHMETIC_MEMORY_ERROR;
+
+    SF_ARITHMETIC_FREE(copy->digits);
+    
+    copy->digits = obj->digits;
+    copy->size = obj->size;
+    copy->sign = obj->sign;
+
+    obj->digits = NULL;
+    SF_ARITHMETIC_FREE(obj);
 
     return SF_ARITHMETIC_FINE;
 }
@@ -107,8 +158,7 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_normalise(sfbigint_t* obj) {
 
     SF_ARITHMETIC_SIZE_T new_size = obj->size;
 
-    for (SF_ARITHMETIC_SIZE_T i = new_size - 1;
-         i < obj->size && obj->digits[i] == 0; i--)
+    for (SF_ARITHMETIC_SIZE_T i = new_size - 1; i < obj->size && obj->digits[i] == 0; i--)
         new_size--;
 
     new_size = new_size == 0 ? 1 : new_size;
@@ -171,6 +221,7 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_lshift(sfbigint_t* obj,
 
     SF_ARITHMETIC_FREE(obj->digits);
     obj->digits = new_digits;
+    obj->size = new_size;
 
     if (part_ints != 0) {
         SF_ARITHMETIC_DIGITS_T remainder = 0;
@@ -249,7 +300,7 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_divmod10(sfbigint_t* obj,
         return SF_ARITHMETIC_MEMORY_ERROR;
 
     SF_ARITHMETIC_BIGDIGITS_T remainder = 0;
-    for (int i = obj->size; i >= 0; i--) {
+    for (SF_ARITHMETIC_SIZE_T i = obj->size - 1; i < obj->size ; i--) {
         SF_ARITHMETIC_BIGDIGITS_T current =
             remainder << SF_ARITHMETIC_DIGITS_T_SIZE_BITS |
             ((SF_ARITHMETIC_BIGDIGITS_T)obj->digits[i]);
@@ -298,14 +349,21 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_mul10(sfbigint_t* obj) {
 }
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_strtosfbigint(sfbigint_t** obj,
-                                                 SF_ARITHMETIC_CHAR_T* str,
+                                                 const SF_ARITHMETIC_CHAR_T* str,
                                                  SF_ARITHMETIC_SIZE_T len) {
     sfbigint_t* obj_ = NULL;
     SF_ARITHMETIC_STATUS_CODE rc_create = sfbigint_create(&obj_, 1);
 
     if (rc_create != SF_ARITHMETIC_FINE) return rc_create;
 
-    for (SF_ARITHMETIC_SIZE_T i = 0; i < len; ++i) {
+    SF_ARITHMETIC_SIZE_T i = 0;
+
+    if (str[0] == '-') {
+        i++;
+        obj_->sign = SF_ARITHMETIC_MINUS;
+    }
+
+    for (; i < len; ++i) {
         obj_->digits[0] += str[i] - '0';
 
         if (i != len - 1) {
@@ -330,40 +388,62 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_tostring(sfbigint_t* obj,
     SF_ARITHMETIC_CHAR_T* str =
         SF_ARITHMETIC_CALLOC(10, sizeof(SF_ARITHMETIC_CHAR_T));
     SF_ARITHMETIC_SIZE_T str_size = 10;
-
+    
     sfbigint_t* obj_ = NULL;
-    SF_ARITHMETIC_STATUS_CODE rc_copy = sfbigint_copy(obj, &obj_);
-
-    if (rc_copy != SF_ARITHMETIC_FINE) return SF_ARITHMETIC_MEMORY_ERROR;
-
+    
     SF_ARITHMETIC_SIZE_T num_count = 0;
+    
+    if (sfbigint_iszero(obj) == SF_ARITHMETIC_TRUE) {
+        str[0] = '0';
+        goto end;
+    }
+
+    SF_ARITHMETIC_STATUS_CODE rc_copy = sfbigint_copy(obj, &obj_);
+    if (rc_copy != SF_ARITHMETIC_FINE) goto err;
+
     while (!sfbigint_iszero(obj_)) {
         SF_ARITHMETIC_DIGITS_T num = 0;
         SF_ARITHMETIC_STATUS_CODE rc_divmod = sfbigint_divmod10(obj_, &num);
 
-        if (rc_divmod != SF_ARITHMETIC_FINE) return rc_divmod;
+        if (rc_divmod != SF_ARITHMETIC_FINE) goto err_after_obj;
 
-        if (num_count + 1 >= str_size) {
+        if (num_count + 2 >= str_size) {
             str_size *= 2;
             SF_ARITHMETIC_CHAR_T* temp = SF_ARITHMETIC_REALLOC(
                 str, sizeof(SF_ARITHMETIC_CHAR_T) * str_size);
 
-            if (!temp) {
-                SF_ARITHMETIC_FREE(str);
-                return SF_ARITHMETIC_MEMORY_ERROR;
-            }
+            if (!temp) goto err_after_obj;
 
             str = temp;
         }
 
         str[num_count] = '0' + num;
+        num_count++;
+    }
+
+    if (obj_->sign == SF_ARITHMETIC_MINUS) {
+        str[num_count] = '-';
+        num_count++;
     }
 
     for (SF_ARITHMETIC_SIZE_T i = 0; i < num_count / 2; ++i) {
         SF_ARITHMETIC_CHAR_T temp = str[i];
-        str[i] = str[num_count - i];
-        str[num_count - i] = temp;
+        str[i] = str[num_count - i - 1];
+        str[num_count - i - 1] = temp;
     }
+
+    goto end;
+
+err_after_obj:
+    sfbigint_free(obj_);
+
+err:
+    SF_ARITHMETIC_FREE(str);
+
+    return SF_ARITHMETIC_MEMORY_ERROR;
+
+end:
+    sfbigint_free(obj_);
 
     num_count++;
 
@@ -524,5 +604,166 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_sub(sfbigint_t* first, sfbigint_t* second,
         }
     }
 }
+
+// функция +=, прибавляет первое число ко второму и записывает результат в первое
+SF_ARITHMETIC_STATUS_CODE sfbigint_addeq(sfbigint_t* first, sfbigint_t* second) {
+    sfbigint_t* temp = NULL;
+    
+    SF_ARITHMETIC_STATUS_CODE rc_create = sfbigint_create(&temp, 1);
+    if (rc_create != SF_ARITHMETIC_FINE) return rc_create;
+
+    SF_ARITHMETIC_STATUS_CODE rc_add = sfbigint_add(first, second, temp);
+    if (rc_add != SF_ARITHMETIC_FINE) return rc_add;
+
+    SF_ARITHMETIC_FREE(first->digits);
+
+    first->digits = temp->digits;
+    first->size = temp->size;
+    first->sign = temp->sign;
+
+    SF_ARITHMETIC_FREE(temp);
+
+    return SF_ARITHMETIC_FINE;
+}
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_subeq(sfbigint_t* first, sfbigint_t* second) {
+    sfbigint_t* temp = NULL;
+    SF_ARITHMETIC_STATUS_CODE rc_create = sfbigint_create(&temp, 1);
+
+    if (rc_create != SF_ARITHMETIC_FINE) return rc_create;
+
+    SF_ARITHMETIC_STATUS_CODE rc_sub = sfbigint_sub(first, second, temp);
+    if (rc_sub != SF_ARITHMETIC_FINE) return rc_sub;
+
+    SF_ARITHMETIC_FREE(first->digits);
+
+    first->digits = temp->digits;
+    first->size = temp->size;
+    first->sign = temp->sign;
+
+    SF_ARITHMETIC_FREE(temp);
+
+    return SF_ARITHMETIC_FINE;
+}
+
+// Вспомогательная функция для разделения числа на две части
+static SF_ARITHMETIC_STATUS_CODE sfbigint_split(sfbigint_t* num,
+                                                SF_ARITHMETIC_SIZE_T m,
+                                                sfbigint_t* low,
+                                                sfbigint_t* high) {
+    if (!num || !low || !high) return SF_ARITHMETIC_INVALID_ARGUMENT;
+
+    // Инициализируем low часть (первые m цифр)
+    low->size = m;
+    low->digits = num->digits;
+    low->sign = SF_ARITHMETIC_PLUS;
+
+    // Инициализируем high часть (остальные цифры)
+    high->size = num->size - m;
+    high->digits = num->digits + m;
+    high->sign = SF_ARITHMETIC_PLUS;
+
+    return SF_ARITHMETIC_FINE;
+}
+
+SF_ARITHMETIC_STATUS_CODE sfbigint_mul_digits(sfbigint_t* obj, SF_ARITHMETIC_DIGITS_T num) {
+    sfbigint_t* res = NULL;
+    sfbigint_t* temp = NULL;
+
+    SF_ARITHMETIC_STATUS_CODE rc_addeq = SF_ARITHMETIC_FINE;
+    SF_ARITHMETIC_STATUS_CODE rc_shift = SF_ARITHMETIC_FINE;
+    SF_ARITHMETIC_STATUS_CODE rc_create = SF_ARITHMETIC_FINE;
+
+    rc_create = sfbigint_create(&temp, 2);
+    if (rc_create != SF_ARITHMETIC_FINE) return rc_create;
+
+    rc_create = sfbigint_create(&res, obj->size + 1);
+    if (rc_create != SF_ARITHMETIC_FINE) return rc_create;
+
+    temp->sign = SF_ARITHMETIC_PLUS;
+
+
+    for (SF_ARITHMETIC_SIZE_T i = obj->size - 1; i < obj->size; --i) {
+        SF_ARITHMETIC_BIGDIGITS_T temp_digits = (SF_ARITHMETIC_BIGDIGITS_T) obj->digits[i] * (SF_ARITHMETIC_BIGDIGITS_T) num;
+        
+        temp->digits[0] = temp_digits & SF_ARITHMETIC_DIGITS_T_FULL_MASK;
+        temp->digits[1] = temp_digits & SF_ARITHMETIC_BIGDIGITS_LEFTHALF_MASK;
+
+        rc_addeq = sfbigint_addeq(res, temp);
+        if (rc_addeq != SF_ARITHMETIC_FINE) {
+            sfbigint_free(res);
+            sfbigint_free(temp);
+            return rc_addeq;
+        }
+
+        if (i != 0) {
+            rc_shift = sfbigint_lshift(res, SF_ARITHMETIC_DIGITS_T_SIZE_BITS);
+            if (rc_shift != SF_ARITHMETIC_FINE) return rc_shift;
+        }
+    }
+
+    sfbigint_free(temp);
+    
+
+    SF_ARITHMETIC_STATUS_CODE rc_moveext = sfbigint_movetoexistent(res, obj);
+    if (rc_moveext != SF_ARITHMETIC_FINE) return rc_moveext;
+
+
+    return SF_ARITHMETIC_FINE;
+}
+
+// // // Наивное умножение (используется для маленьких чисел)
+SF_ARITHMETIC_STATUS_CODE sfbigint_mul_naive(sfbigint_t* first,
+                                                    sfbigint_t* second,
+                                                    sfbigint_t** res) {
+    if (sfbigint_fine(first) != SF_ARITHMETIC_FINE ||
+        sfbigint_fine(second) != SF_ARITHMETIC_FINE)
+        return SF_ARITHMETIC_MEMORY_ERROR;
+
+    SF_ARITHMETIC_STATUS_CODE rc = SF_ARITHMETIC_FINE;
+
+    sfbigint_t* res_ = NULL;
+    sfbigint_t* temp = NULL;
+    
+    rc = sfbigint_create(&res_, first->size * second->size);
+    if (rc != SF_ARITHMETIC_FINE) return rc;
+
+
+    for (SF_ARITHMETIC_SIZE_T i = 0; i < second->size; ++i) {
+        if (i == 0)
+            rc = sfbigint_copy(first, &temp); 
+        else 
+            rc = sfbigint_copytoexistent(first, temp);
+        if (rc != SF_ARITHMETIC_FINE) goto err;
+        
+        rc = sfbigint_mul_digits(temp, second->digits[i]);
+        if (rc != SF_ARITHMETIC_FINE) goto err;
+
+        rc = sfbigint_lshift(temp, SF_ARITHMETIC_DIGITS_T_SIZE_BITS * i);
+        if (rc != SF_ARITHMETIC_FINE) goto err;
+
+        rc = sfbigint_addeq(res_, temp);
+
+        if (rc != SF_ARITHMETIC_FINE) goto err;
+    }   
+
+    goto fine;
+
+err:
+    sfbigint_free(res_);
+    sfbigint_free(temp);
+
+    return SF_ARITHMETIC_MEMORY_ERROR;
+
+fine:
+    sfbigint_free(temp);
+
+
+    rc = sfbigint_move(res_, res);
+    if (rc != SF_ARITHMETIC_FINE) sfbigint_free(res_);
+
+    return rc;
+}
+
 
 #endif  // SF_ARITHMETIC_C

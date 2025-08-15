@@ -109,6 +109,58 @@ TEST(addition, simpleadd2) {
     sfbigint_free(res);
 }
 
+TEST(addition_normal, simpleadd2) {
+    sfbigint_t* obj1 = NULL;
+    sfbigint_t* obj2 = NULL;
+    sfbigint_t* res = NULL;
+
+    SF_ARITHMETIC_SIGN_T rc = sfbigint_create(&obj1, 1);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    rc = sfbigint_create(&obj2, 1);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    rc = sfbigint_create(&res, 1);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    obj1->digits[0] = 1 << 31;
+    obj2->digits[0] = 1 << 31;
+
+    rc = sfbigint_add(obj1, obj2, res);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(res->digits[0], 0);
+    EXPECT_EQ(res->digits[1], 1);
+
+    sfbigint_free(obj1);
+    sfbigint_free(obj2);
+    sfbigint_free(res);
+}
+
+TEST(addeq, simpleadd) {
+    sfbigint_t* obj1 = NULL;
+    sfbigint_t* obj2 = NULL;
+
+    SF_ARITHMETIC_SIGN_T rc = sfbigint_create(&obj1, 1);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    rc = sfbigint_create(&obj2, 1);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+
+    obj1->digits[0] = 1 << 31;
+    obj2->digits[0] = 1 << 31;
+
+    rc = sfbigint_addeq(obj1, obj2);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(obj1->digits[0], 0);
+    EXPECT_EQ(obj1->digits[1], 1);
+
+    sfbigint_free(obj1);
+    sfbigint_free(obj2);
+}
+
 TEST(subtraction, first_bigger_by_size) {
     sfbigint_t* first = NULL;
     sfbigint_t* second = NULL;
@@ -450,13 +502,89 @@ TEST(tostring, simpletest) {
 
     EXPECT_EQ(rc_tostr, SF_ARITHMETIC_FINE);
 
-    for (SF_ARITHMETIC_SIZE_T i = 0; i < (SF_ARITHMETIC_SIZE_T)strlen(str);
+    for (SF_ARITHMETIC_SIZE_T i = 0; i < 10;
          ++i) {
         EXPECT_EQ(str[i], etha[i]);
     }
 
     sfbigint_free(obj);
+    SF_ARITHMETIC_FREE(str);
 }
+
+TEST(tostring, Ten) {
+    sfbigint_t* obj = NULL;
+
+    int rc = sfbigint_create(&obj, 2);
+
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    obj->digits[0] = 10;
+
+    char* str = NULL;
+    char reference[] = "10";
+
+    SF_ARITHMETIC_STATUS_CODE rc_tostr = sfbigint_tostring(obj, &str);
+
+    EXPECT_EQ(rc_tostr, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(str[0], reference[0]);
+    EXPECT_EQ(str[1], reference[1]);
+
+
+    sfbigint_free(obj);
+    SF_ARITHMETIC_FREE(str);
+}
+
+TEST(tostring, MinusTen) {
+    sfbigint_t* obj = NULL;
+
+    int rc = sfbigint_create(&obj, 2);
+
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    obj->digits[0] = 10;
+    obj->sign = SF_ARITHMETIC_MINUS;
+
+    char* str = NULL;
+    char reference[] = "-10";
+
+    SF_ARITHMETIC_STATUS_CODE rc_tostr = sfbigint_tostring(obj, &str);
+
+    EXPECT_EQ(rc_tostr, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(str[0], reference[0]);
+    EXPECT_EQ(str[1], reference[1]);
+    EXPECT_EQ(str[2], reference[2]);
+
+
+
+    sfbigint_free(obj);
+    SF_ARITHMETIC_FREE(str);
+}
+
+TEST(tostring, zero) {
+    sfbigint_t* obj = NULL;
+
+    int rc = sfbigint_create(&obj, 1);
+
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    obj->digits[0] = 0;
+
+    char* str = NULL;
+    char reference[] = "0";
+
+    SF_ARITHMETIC_STATUS_CODE rc_tostr = sfbigint_tostring(obj, &str);
+
+    EXPECT_EQ(rc_tostr, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(str[0], reference[0]);
+    EXPECT_EQ(str[1], reference[1]);
+
+    sfbigint_free(obj);
+    SF_ARITHMETIC_FREE(str);
+}
+
 
 TEST(strtosfbigint, simpletest) {
     sfbigint_t* obj = NULL;
@@ -470,4 +598,119 @@ TEST(strtosfbigint, simpletest) {
     EXPECT_EQ(obj->digits[0], 23);
 
     sfbigint_free(obj);
+}
+
+TEST(strtosfbigint, Minus) {
+    sfbigint_t* obj = NULL;
+
+    SF_ARITHMETIC_CHAR_T str[] = "-23";
+
+    SF_ARITHMETIC_STATUS_CODE rc_strbigint =
+        sfbigint_strtosfbigint(&obj, str, 3);
+
+    EXPECT_EQ(rc_strbigint, SF_ARITHMETIC_FINE);
+    EXPECT_EQ(obj->digits[0], 23);
+    EXPECT_EQ(obj->sign, SF_ARITHMETIC_MINUS);
+
+    sfbigint_free(obj);
+}
+
+TEST(multiply_digits, leaks) {
+    sfbigint_t* first = NULL;
+
+    SF_ARITHMETIC_STATUS_CODE rc = SF_ARITHMETIC_FINE;
+
+    rc = sfbigint_create(&first, 2);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    first->digits[0] = 1;
+    first->digits[1] = 1;
+
+    rc = sfbigint_mul_digits(first, 2);
+    EXPECT_EQ(rc, SF_ARITHMETIC_FINE);
+
+    EXPECT_EQ(first->digits[0], 2);
+    EXPECT_EQ(first->digits[1], 2);
+
+
+    sfbigint_free(first);
+}
+
+TEST(Multiply, stress) {
+    sfbigint_t* first = NULL;
+
+    int mul = 1;
+
+    for (; mul < 1e3; mul <<= 1) {
+        for (int i = 0; i < 1e3; ++i) {
+            auto str = std::to_string(i);
+            sfbigint_strtosfbigint(&first, str.c_str(), str.size());
+
+            sfbigint_mul_digits(first, mul);
+
+
+            char* res_c_str = NULL;
+            sfbigint_tostring(first, &res_c_str);
+            
+
+            auto res_str = std::string(res_c_str);
+            
+            int res_num = std::stoi(res_str);
+
+            EXPECT_EQ(res_num, i * mul);
+
+            sfbigint_free(first);
+            SF_ARITHMETIC_FREE(res_c_str);
+        }
+    }
+}
+
+TEST(Multiply_naive, simpletest) {
+    sfbigint_t* first = NULL;
+    sfbigint_t* second = NULL;
+    sfbigint_t* res = NULL;
+
+    sfbigint_create(&first, 2);
+    sfbigint_create(&second, 2);
+
+    first->digits[0] = 1;
+    first->digits[1] = 1;
+
+    second->digits[0] = 1;
+    second->digits[1] = 1;
+
+    sfbigint_mul_naive(first, second, &res);
+
+    EXPECT_EQ(res->digits[0], 1);
+    EXPECT_EQ(res->digits[1], 2);
+    EXPECT_EQ(res->digits[2], 1);
+
+    sfbigint_free(first);
+    sfbigint_free(second);
+    sfbigint_free(res);
+}
+
+TEST(Multiply_naive, simpletest_2) {
+    sfbigint_t* first = NULL;
+    sfbigint_t* second = NULL;
+    sfbigint_t* res = NULL;
+
+
+    sfbigint_create(&first, 2);
+    sfbigint_create(&second, 2);
+
+    first->digits[0] = 1;
+    first->digits[1] = 0;
+
+    second->digits[0] = 0;
+    second->digits[1] = 2;
+
+    sfbigint_mul_naive(first, second, &res);
+
+    EXPECT_EQ(res->digits[0], 0);
+    EXPECT_EQ(res->digits[1], 2);
+
+    sfbigint_free(first);
+    sfbigint_free(second);
+    sfbigint_free(res);
 }

@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.14)
+
 project(SF_ARITHMETIC_TEST LANGUAGES CXX)
 
 include(FetchContent)
@@ -9,6 +11,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(test_base main.cpp)
+target_compile_options(test_base PUBLIC -Wall -Wextra)
 target_link_libraries(test_base PRIVATE SF_ARITHMETIC_LIB gtest_main)
 
 set_target_properties(SF_ARITHMETIC_LIB PROPERTIES LINKER_LANGUAGE C)
