@@ -1,4 +1,9 @@
+build/
+cmake-build-debug/
+.gitignore
+.idea/
 .vscode
+.clang-format
 _deps/
 bin/
 CMakeFiles/
@@ -8,3 +13,10 @@ cmake_install.cmake
 CTestTestfile.cmake
 Makefile
 CMakeCache.txt
+
+# Out-of-source build variants
+build-*/
+cmake-build-*/
+__pycache__/
+*.gcda
+*.gcno

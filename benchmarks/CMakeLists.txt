@@ -1,0 +1,5 @@
+add_executable(addition_bench addition_bench.cpp)
+target_link_libraries(addition_bench PRIVATE SF_ARITHMETIC_LIB)
+
+add_executable(arithmetic_bench arithmetic_bench.cpp)
+target_link_libraries(arithmetic_bench PRIVATE SF_ARITHMETIC_LIB)
