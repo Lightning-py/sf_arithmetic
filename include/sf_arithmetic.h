@@ -3,11 +3,14 @@
 
 // для типов данных
 #include <limits.h>  // limits for types
-#include <stddef.h>  // types for digits and bigdigits
-#include <stdint.h>  // size_t
+#include <stddef.h>  // size_t
+#include <stdint.h>  // uint32_t, uint64_t
+#include <stdlib.h>
 #include <string.h>  // memcpy
 
-#include <stdio.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // переобозначения типов для структуры
 typedef int SF_ARITHMETIC_STATUS_CODE;  // тип хранения статус кодов
@@ -21,13 +24,15 @@ typedef char SF_ARITHMETIC_CHAR_T;
 #define SF_ARITHMETIC_BIGDIGITS_T_SIZE (sizeof(SF_ARITHMETIC_BIGDIGITS_T))
 #define SF_ARITHMETIC_CHAR_T_SIZE (sizeof(SF_ARITHMETIC_CHAR_T))
 
-#define SF_ARITHMETIC_DIGITS_T_SIZE_BITS (SF_ARITHMETIC_DIGITS_T_SIZE * 8)
-#define SF_ARITHMETIC_BIGDIGITS_T_SIZE_BITS (SF_ARITHMETIC_BIGDIGITS_T_SIZE * 8)
-#define SF_ARITHMETIC_CHAR_T_SIZE_BITS (sizeof(SF_ARITHMETIC_CHAR_T) * 8)
+#define SF_ARITHMETIC_DIGITS_T_SIZE_BITS                                       \
+    (SF_ARITHMETIC_DIGITS_T_SIZE * CHAR_BIT)
+#define SF_ARITHMETIC_BIGDIGITS_T_SIZE_BITS                                    \
+    (SF_ARITHMETIC_BIGDIGITS_T_SIZE * CHAR_BIT)
+#define SF_ARITHMETIC_CHAR_T_SIZE_BITS (sizeof(SF_ARITHMETIC_CHAR_T) * CHAR_BIT)
 
 #define SF_ARITHMETIC_DIGITS_T_FULL_MASK UINT32_MAX
 #define SF_ARITHMETIC_BIGDIGITS_T_FULL_MASK UINT64_MAX
-#define SF_ARITHMETIC_BIGDIGITS_LEFTHALF_MASK \
+#define SF_ARITHMETIC_BIGDIGITS_LEFTHALF_MASK                                  \
     (SF_ARITHMETIC_BIGDIGITS_T_FULL_MASK ^ SF_ARITHMETIC_DIGITS_T_FULL_MASK)
 
 // дефайны для знаков числа
@@ -38,7 +43,7 @@ typedef char SF_ARITHMETIC_CHAR_T;
 
 #define SF_ARITHMETIC_FINE 0           // все в порядке
 #define SF_ARITHMETIC_MEMORY_ERROR -1  // ошибка памяти
-#define SF_ARITHMETIC_INVALID_ARGUMENT \
+#define SF_ARITHMETIC_INVALID_ARGUMENT                                         \
     -2  // неправильный аргумент, невозможность выполнения операции с данным
         // аргументом
 
@@ -51,7 +56,7 @@ digits - массив с числами в системе счисления 2^3
 size - количество чисел в массиве
 sign - знак числа
 
-назовем цифрой (с овнованием системы счисления 2^32) число в массиве digits
+назовем цифрой (с основанием системы счисления 2^32) число в массиве digits
 
 порядок битов в цифре определяется целевой системой
 цифры в массиве хранятся от младших к старшим слева направо
@@ -77,7 +82,13 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_normalise(sfbigint_t* obj);
 SF_ARITHMETIC_STATUS_CODE sfbigint_setzero(sfbigint_t* obj);
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_copy(sfbigint_t* obj, sfbigint_t** copy);
+/* move consumes obj on success; the old pointer must not be used again. */
 SF_ARITHMETIC_STATUS_CODE sfbigint_move(sfbigint_t* obj, sfbigint_t** copy);
+SF_ARITHMETIC_STATUS_CODE sfbigint_copytoexistent(sfbigint_t* obj,
+                                                  sfbigint_t* copy);
+/* Consumes obj unless obj == copy (a no-op). */
+SF_ARITHMETIC_STATUS_CODE sfbigint_movetoexistent(sfbigint_t* obj,
+                                                  sfbigint_t* copy);
 SF_ARITHMETIC_STATUS_CODE sfbigint_swap(sfbigint_t* first, sfbigint_t* second);
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_iszero(sfbigint_t* obj);
@@ -101,12 +112,21 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_divmod10(sfbigint_t* obj,
 
 SF_ARITHMETIC_STATUS_CODE sfbigint_mul10(sfbigint_t* obj);
 
-SF_ARITHMETIC_STATUS_CODE sfbigint_strtosfbigint(sfbigint_t** obj,
-                                                 const SF_ARITHMETIC_CHAR_T* str,
-                                                 SF_ARITHMETIC_SIZE_T len);
+SF_ARITHMETIC_STATUS_CODE
+sfbigint_strtosfbigint(sfbigint_t** obj, const SF_ARITHMETIC_CHAR_T* str,
+                       SF_ARITHMETIC_SIZE_T len);
 SF_ARITHMETIC_STATUS_CODE sfbigint_tostring(sfbigint_t* obj,
                                             SF_ARITHMETIC_CHAR_T** str);
 
+/* Arithmetic preserves inputs unless res aliases an input. Aliasing res with
+ * either input is supported. On failure, existing objects remain unchanged.
+ * Division truncates toward zero; division by zero returns INVALID_ARGUMENT.
+ * Right shift divides the magnitude by 2^times, also truncating toward zero.
+ * Zero is normalised to size=1, digits[0]=0, sign=PLUS.
+ * Allocation outputs (T**) must point to an empty output slot. They are only
+ * assigned on success; callers must release a previous result before reuse.
+ * divmod10 returns a nonnegative remainder of the magnitude.
+ */
 // стандартные арифметические функции
 SF_ARITHMETIC_STATUS_CODE
 sfbigint_add(sfbigint_t* first, sfbigint_t* second, sfbigint_t* res);
@@ -117,10 +137,11 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_mul(sfbigint_t* first, sfbigint_t* second,
 SF_ARITHMETIC_STATUS_CODE sfbigint_div(sfbigint_t* first, sfbigint_t* second,
                                        sfbigint_t* res);
 
-// функция +=, прибавляет первое число ко второму и записывает результат в первое
+// функция +=, прибавляет первое число ко второму и записывает результат в
+// первое
 SF_ARITHMETIC_STATUS_CODE sfbigint_addeq(sfbigint_t* first, sfbigint_t* second);
 
-// функция +=, прибавляет первое число ко второму и записывает результат в первое
+// first -= second
 SF_ARITHMETIC_STATUS_CODE sfbigint_subeq(sfbigint_t* first, sfbigint_t* second);
 
 //
@@ -129,19 +150,21 @@ __sfbigint_add__(sfbigint_t* first, sfbigint_t* second, sfbigint_t* res);
 SF_ARITHMETIC_STATUS_CODE __sfbigint_sub__(sfbigint_t* first,
                                            sfbigint_t* second, sfbigint_t* res);
 
-// static SF_ARITHMETIC_STATUS_CODE sfbigint_split(sfbigint_t* num,
-//                                                 SF_ARITHMETIC_SIZE_T m,
-//                                                 sfbigint_t* low,
-//                                                 sfbigint_t* high);
-
-SF_ARITHMETIC_STATUS_CODE sfbigint_mul_naive(sfbigint_t* first,
-    sfbigint_t* second,
-    sfbigint_t** res);
-
+#ifndef SF_ARITHMETIC_KARATSUBA_THRESHOLD
 #define SF_ARITHMETIC_KARATSUBA_THRESHOLD 4
+#endif
 
-SF_ARITHMETIC_STATUS_CODE sfbigint_mul_digits(sfbigint_t* obj, SF_ARITHMETIC_DIGITS_T num);
+SF_ARITHMETIC_STATUS_CODE sfbigint_mul_karatsuba(sfbigint_t* first,
+                                                 sfbigint_t* second,
+                                                 sfbigint_t** result);
 
+/* Exact FFT using modular transforms (NTT + CRT); allocates a new result.
+ * For transforms larger than 2^23 points, falls back to Karatsuba. */
+SF_ARITHMETIC_STATUS_CODE
+sfbigint_mul_fft(sfbigint_t* first, sfbigint_t* second, sfbigint_t** result);
+#ifndef SF_ARITHMETIC_FFT_THRESHOLD
+#define SF_ARITHMETIC_FFT_THRESHOLD 2048
+#endif
 
 /*
 дефайны для определения способа выделения памяти
@@ -149,13 +172,23 @@ SF_ARITHMETIC_STATUS_CODE sfbigint_mul_digits(sfbigint_t* obj, SF_ARITHMETIC_DIG
 стандартной библиотекой C
 */
 
-#include <stdlib.h>  // malloc, calloc
-
+#ifndef SF_ARITHMETIC_MALLOC
 #define SF_ARITHMETIC_MALLOC malloc
+#endif
+#ifndef SF_ARITHMETIC_CALLOC
 #define SF_ARITHMETIC_CALLOC calloc
+#endif
+#ifndef SF_ARITHMETIC_REALLOC
 #define SF_ARITHMETIC_REALLOC realloc
+#endif
+#ifndef SF_ARITHMETIC_FREE
 #define SF_ARITHMETIC_FREE free
+#endif
 
-#define SF_MAX(first, second) (first > second ? first : second)
+#define SF_MAX(first, second) ((first) > (second) ? (first) : (second))
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // SF_ARITHMETIC_H

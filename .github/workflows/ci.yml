@@ -1,0 +1,24 @@
+name: C library checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test with sanitizers
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON -DBUILD_BENCHMARKS=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+          ./build/benchmarks/addition_bench
+      - name: Build the standalone C library
+        run: |
+          cmake -S . -B build-lib -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-lib -j2
